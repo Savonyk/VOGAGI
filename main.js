@@ -91,6 +91,10 @@ function draw() {
     surface.Draw();
 }
 
+function GetCurrentZPosition(h){
+    return Math.pow(Math.abs(h) - height, 2) / (2*p);
+}  
+
 // surface - parabolic humming-top
 // x = ((|z| - h)^2 / 2*p)) * cosB
 // y = ((|z| - h)^2 / 2*p)) * sinB
@@ -102,7 +106,7 @@ function CreateSurfaceData()
     for (let i = -height; i <= height; i += v) {
         for(let j = 0; j <= 360; j += u){
             let currentAngle = GetRadiansFromDegree(j);
-            let currentTemp = Math.pow(Math.abs(i) - height, 2) / (2*p);
+            let currentTemp = GetCurrentZPosition(i);
             vertexList.push(currentTemp * Math.cos(currentAngle), i, currentTemp * Math.sin(currentAngle));
         }
     }
@@ -110,7 +114,7 @@ function CreateSurfaceData()
     for (let i = 0; i <= 360; i += u) {
         for(let j = -height; j <= height; j += v){
             let currentAngle = GetRadiansFromDegree(i);
-            let currentTemp = Math.pow(Math.abs(j) - height, 2) / (2*p);
+            let currentTemp = GetCurrentZPosition(j);
             vertexList.push(currentTemp * Math.cos(currentAngle), j, currentTemp * Math.sin(currentAngle));
         }
     }
