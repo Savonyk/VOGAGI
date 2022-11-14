@@ -8,6 +8,7 @@ let height = 1.5;
 let width = 360
 let u = 20;
 let v = 0.15
+let p = 1
 
 function GetRadiansFromDegree(angle) {
     return angle * Math.PI / 180;
@@ -90,10 +91,31 @@ function draw() {
     surface.Draw();
 }
 
-
+// surface - parabolic humming-top
+// x = ((|z| - h)^2 / 2*p)) * cosB
+// y = ((|z| - h)^2 / 2*p)) * sinB
+// z = z
 function CreateSurfaceData()
 {
     let vertexList = [];
+
+    for (let i = -height; i <= height; i += v) {
+        for(let j = 0; j <= 360; j += u){
+            let currentAngle = GetRadiansFromDegree(j);
+            let currentTemp = Math.pow(Math.abs(i) - height, 2) / (2*p);
+            vertexList.push(currentTemp * Math.cos(currentAngle), i, currentTemp * Math.sin(currentAngle));
+        }
+    }
+
+    for (let i = 0; i <= 360; i += u) {
+        for(let j = -height; j <= height; j += v){
+            let currentAngle = GetRadiansFromDegree(i);
+            let currentTemp = Math.pow(Math.abs(j) - height, 2) / (2*p);
+            vertexList.push(currentTemp * Math.cos(currentAngle), j, currentTemp * Math.sin(currentAngle));
+        }
+    }
+
+
     return vertexList;
 }
 
