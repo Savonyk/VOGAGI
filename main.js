@@ -4,8 +4,13 @@ let gl;                         // The webgl context.
 let surface;                    // A surface model
 let shProgram;                  // A shader program
 let spaceball;                  // A SimpleRotator object that lets the user rotate the view by mouse.
+let height = 1.5;
+let width = 360;
+let u = 19;
+let v = 0.15;
+let p = 1;
 
-function deg2rad(angle) {
+function GetRadiansFromDegree(angle) {
     return angle * Math.PI / 180;
 }
 
@@ -30,7 +35,7 @@ function Model(name) {
         gl.vertexAttribPointer(shProgram.iAttribVertex, 3, gl.FLOAT, false, 0, 0);
         gl.enableVertexAttribArray(shProgram.iAttribVertex);
    
-        gl.drawArrays(gl.LINE_STRIP, 0, this.count);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, this.count);
     }
 }
 
@@ -54,7 +59,7 @@ function ShaderProgram(name, program) {
 }
 
 
-/* Draws a colored cube, along with a set of coordinate axes.
+/*Draws a colored cube, along with a set of coordinate axes.
  * (Note that the use of the above drawPrimitive function is not an efficient
  * way to draw with WebGL.  Here, the geometry is so simple that it doesn't matter.)
  */
@@ -81,18 +86,31 @@ function draw() {
     gl.uniformMatrix4fv(shProgram.iModelViewProjectionMatrix, false, modelViewProjection );
     
     /* Draw the six faces of a cube, with different colors. */
-    gl.uniform4fv(shProgram.iColor, [1,1,0,1] );
+    gl.uniform4fv(shProgram.iColor, [0.3,0,1,1] );
 
     surface.Draw();
 }
 
+function GetCurrentZPosition(h){
+    return Math.pow(Math.abs(h) - height, 2) / (2*p);
+}  
+
+// surface - parabolic humming-top
+// x = ((|z| - h)^2 / 2*p)) * cosB
+// y = ((|z| - h)^2 / 2*p)) * sinB
+// z = z
 function CreateSurfaceData()
 {
     let vertexList = [];
 
-    for (let i=0; i<360; i+=5) {
-        vertexList.push( Math.sin(deg2rad(i)), 1, Math.cos(deg2rad(i)) );
-        vertexList.push( Math.sin(deg2rad(i)), 0, Math.cos(deg2rad(i)) );
+    for (let i = 0; i <= 360; i += u) {
+        for(let j = -height; j <= height; j += v){
+            let currentAngle = GetRadiansFromDegree(i);
+            let currentTemp = GetCurrentZPosition(j);
+            let nextAngle = GetRadiansFromDegree(i + u)
+            vertexList.push(currentTemp * Math.cos(currentAngle), j, currentTemp * Math.sin(currentAngle));
+            vertexList.push(currentTemp * Math.cos(nextAngle), j, currentTemp * Math.sin(nextAngle));
+        }
     }
 
     return vertexList;
