@@ -2,133 +2,91 @@
 
 let gl;                         // The webgl context.
 let surface;                    // A surface model
+let light;
 let shProgram;                  // A shader program
 let spaceball;                  // A SimpleRotator object that lets the user rotate the view by mouse.
+let N = 20;                     // splines count
+let lightPositionEl;
+let lightPos = [0,0,0];
 let height = 1.5;
-let width = 360;
-let u = 18;
-let v = 0.15;
+let step = 20;
+let radius = 10;
 let p = 1;
 
 function GetRadiansFromDegree(angle) {
     return angle * Math.PI / 180;
 }
 
-function GetNormal(firstPoint, secondPoint, thirdPoint)
+function GetCirclePoint(angle)
 {
-    let result = []; 
+    angle = GetRadiansFromDegree(angle);
+    let x = radius * Math.cos(angle);
+    let y = 0;
+    let z = radius * Math.sin(angle);
 
-    let a = m4.subtractVectors(secondPoint,firstPoint);
-    let b = m4.subtractVectors(thirdPoint,firstPoint);
-
-    result = m4.cross(a, b);
-
-    return result;
+    return [x,y,z];
 }
 
-function CreateTriangles(vertices)
-{
-    let triangles = [];
-
-    for (let i = 0; i < vertices.length; i += 3) {
-
-        let first = [vertices[i], vertices[i + 1], vertices[i + 2]];
-        let second = [vertices[i + 3], vertices[i + 4], vertices[i + 5]];
-        let third = [vertices[i + 6], vertices[i + 7], vertices[i + 8]];
-
-        triangles.push(new Triangle(first, second, third, m4.normalize(GetNormal(first, second, third))));
-    }
-    return triangles;
-}
-
-function UpdateNormalsInTriangles(triangles)
-{
-    for(let i = 0; i < triangles.length - 1;i++)
-    {
-        for(let j = i + 1; j < triangles.length; j++)
-        {
-            if(triangles[i].ContainsVertex(triangles[j]))
-            {
-                let normal = m4.addVectors(triangles[i].normal, triangles[j].normal);
-                triangles[i].normal = normal;
-            }
-            
-        }
-    }
-}
-
-function IsEqualValue(first, second)
-{
-    if(first[0] == second[0] || first[1] == second[1] || first[2] == second[2])     return true;
-
-    return false;
-}
-
-function Triangle(first, second, third, normal)
-{
-    this.firstPoint = first;
-    this.secondPoint = second;
-    this.thirdPoint = third;
-    this.normal = normal;
-    this.vertexs = [];
-
-    this.ContainsVertex = function(triangle)
-    {
-        if(this == triangle) return false;
-
-        if(IsEqualValue(this.firstPoint, triangle.firstPoint) || IsEqualValue(this.secondPoint, triangle.secondPoint)
-          || IsEqualValue(this.thirdPoint, triangle.thirdPoint)) return true;
-
-        return false;
-    }
-}
 
 // Constructor
 function Model(name) {
     this.name = name;
     this.iVertexBuffer = gl.createBuffer();
-    this.iNormalBuffer = gl.createBuffer();
     this.count = 0;
 
-    this.BufferData = function(vertices, normal) { 
+    this.BufferData = function(vertices) {
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.iVertexBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STREAM_DRAW);
 
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.iNormalBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normal), gl.STREAM_DRAW);
-
         this.count = vertices.length/3;
     }
 
-    this.Draw = function() {
+    this.Draw = function(mode) {
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.iVertexBuffer);
         gl.vertexAttribPointer(shProgram.iAttribVertex, 3, gl.FLOAT, false, 0, 0);
         gl.enableVertexAttribArray(shProgram.iAttribVertex);
+   
+        gl.vertexAttribPointer(shProgram.iNormal, 3, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(shProgram.iNormal);    
 
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, this.count);
+        gl.drawArrays(mode, 0, this.count);
 
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.iNormalBuffer);
-        gl.vertexAttribPointer(shProgram.iAttribNormal, 3, gl.FLOAT, false, 0, 0);
-        gl.enableVertexAttribArray(shProgram.iAttribNormal);
+
     }
 }
 
+
 // Constructor
-function ShaderProgram(name, program) { 
+function ShaderProgram(name, program) {
 
     this.name = name;
     this.prog = program;
 
     // Location of the attribute variable in the shader program.
     this.iAttribVertex = -1;
-    // Location of the attribute variable in the shader program.
-    this.iAttribNormal = -1;
     // Location of the uniform specifying a color for the primitive.
     this.iColor = -1;
     // Location of the uniform matrix representing the combined transformation.
     this.iModelViewProjectionMatrix = -1;
+
+    // Normals
+    this.iNormal = -1;
+    this.iNormalMatrix = -1;
+
+    // Ambient, diffuse, specular
+    this.iAmbientColor = -1;
+    this.iDiffuseColor = -1;
+    this.iSpecularColor = -1;
+    this.iAmbientCoefficient = -1;
+    this.iDiffuseCoefficient = -1;
+    this.iSpecularCoefficient = -1;
+    // Shininess
+    this.iShininess = -1;
+
+    // Light position
+    this.iLightPos = -1;
 
     this.Use = function() {
         gl.useProgram(this.prog);
@@ -136,7 +94,7 @@ function ShaderProgram(name, program) {
 }
 
 
-/*Draws a colored cube, along with a set of coordinate axes.
+/* Draws a colored cube, along with a set of coordinate axes.
  * (Note that the use of the above drawPrimitive function is not an efficient
  * way to draw with WebGL.  Here, the geometry is so simple that it doesn't matter.)
  */
@@ -145,7 +103,7 @@ function draw() {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     
     /* Set the values of the projection transformation */
-    let projection = m4.orthographic(-2, 2, -2,2, 8, 12); 
+    let orthographic = m4.orthographic(-2, 2, -2,2, 8, 12); 
     
     /* Get the view matrix from the SimpleRotator object.*/
     let modelView = spaceball.getViewMatrix();
@@ -156,15 +114,36 @@ function draw() {
     let matAccum0 = m4.multiply(rotateToPointZero, modelView );
     let matAccum1 = m4.multiply(translateToPointZero, matAccum0 );
         
+    const modelviewInv = m4.inverse(matAccum1, new Float32Array(16));
+    const normalMatrix = m4.transpose(modelviewInv, new Float32Array(16));  
+
+
     /* Multiply the projection matrix times the modelview matrix to give the
        combined transformation matrix, and send that to the shader program. */
-    let modelViewProjection = m4.multiply(projection, matAccum1 );
+    let modelViewProjection = m4.multiply(orthographic, matAccum1 );
 
     gl.uniformMatrix4fv(shProgram.iModelViewProjectionMatrix, false, modelViewProjection );
     
-    gl.uniform4fv(shProgram.iColor, [0.3,0,1,1] );
+    gl.uniformMatrix4fv(shProgram.iNormalMatrix, false, normalMatrix);
 
-    surface.Draw();
+    let angle = Array.from(lightPositionEl.getElementsByTagName('input')).map(el => +el.value)[0];
+
+    lightPos = GetCirclePoint(angle);
+    gl.uniform3fv(shProgram.iLightPos, lightPos);
+
+    gl.uniform1f(shProgram.iShininess, 80.0);
+    gl.uniform1f(shProgram.iAmbientCoefficient, 1);
+    gl.uniform1f(shProgram.iDiffuseCoefficient, 1);
+    gl.uniform1f(shProgram.iSpecularCoefficient, 1);
+
+    gl.uniform3fv(shProgram.iAmbientColor, [0.2, 0.1, 0.4]);
+    gl.uniform3fv(shProgram.iDiffuseColor, [0, 0.8, 0.8]);
+    gl.uniform3fv(shProgram.iSpecularColor, [1.0, 1.0, 1.0]);
+
+    /* Draw the six faces of a cube, with different colors. */
+    gl.uniform4fv(shProgram.iColor, [0,0,0.8,1] );
+    surface.Draw(gl.TRIANGLE_STRIP);
+    light.Draw(gl.LINES);
 }
 
 function GetCurrentZPosition(h){
@@ -179,36 +158,22 @@ function CreateSurfaceData()
 {
     let vertexList = [];
 
-    for (let i = 0; i <= 360; i += u) 
+    let uStep = 360 / (step + 1); 
+    let vStep = 2 * height / (step + 1);
+    for (let u = 0; u <= 360; u += uStep) 
     {
-        for(let j = -height; j <= height; j += v)
+        for(let v = -height; v <= height; v += vStep)
         {
-            let currentAngle = GetRadiansFromDegree(i);
-            let currentTemp = GetCurrentZPosition(j);
-            let nextAngle = GetRadiansFromDegree(i + u);
+            let currentAngle = GetRadiansFromDegree(u);
+            let currentTemp = GetCurrentZPosition(v);
+            let nextAngle = GetRadiansFromDegree(u + uStep);
 
-            vertexList.push(currentTemp * Math.cos(currentAngle), j, currentTemp * Math.sin(currentAngle));
-            vertexList.push(currentTemp * Math.cos(nextAngle), j, currentTemp * Math.sin(nextAngle));
+            vertexList.push(currentTemp * Math.cos(currentAngle), v, currentTemp * Math.sin(currentAngle));
+            vertexList.push(currentTemp * Math.cos(nextAngle), v, currentTemp * Math.sin(nextAngle));
         }
     }
 
     return vertexList;
-}
-
-function CreateSurfaceNormals(vertices)
-{
-    let normalList = [];
-    let triangles = CreateTriangles(vertices);
-
-    UpdateNormalsInTriangles(triangles);
-
-    for(let i = 0; i < triangles.length; i++)
-    {
-        let normal = m4.normalize(triangles[i].normal);
-        normalList.push(normal[0], normal[1], normal[2]);
-    }
-
-    return normalList;
 }
 
 
@@ -220,13 +185,31 @@ function initGL() {
     shProgram.Use();
 
     shProgram.iAttribVertex              = gl.getAttribLocation(prog, "vertex");
-    shProgram.iAttribNormal            = gl.getAttribLocation(prog, "normal");
     shProgram.iModelViewProjectionMatrix = gl.getUniformLocation(prog, "ModelViewProjectionMatrix");
     shProgram.iColor                     = gl.getUniformLocation(prog, "color");
 
-    surface = new Model('Surface');
-    surface.BufferData(CreateSurfaceData(), CreateSurfaceNormals(CreateSurfaceData()));
+    shProgram.iNormal                    = gl.getAttribLocation(prog, 'normal');
+    shProgram.iNormalMatrix              = gl.getUniformLocation(prog, 'normalMat');
 
+    shProgram.iAmbientColor              = gl.getUniformLocation(prog, 'ambientColor');
+    shProgram.iDiffuseColor              = gl.getUniformLocation(prog, 'diffuseColor');
+    shProgram.iSpecularColor             = gl.getUniformLocation(prog, 'specularColor');
+
+    shProgram.iShininess                 = gl.getUniformLocation(prog, 'shininess');
+
+    shProgram.iLightPos                  = gl.getUniformLocation(prog, 'lightPosition');
+    shProgram.iSpecularCoefficient       = gl.getUniformLocation(prog, 'specularCoefficient');
+    shProgram.iAmbientCoefficient        = gl.getUniformLocation(prog, 'ambientCoefficient');
+    shProgram.iDiffuseCoefficient        = gl.getUniformLocation(prog, 'diffuseCoefficient');
+
+    surface = new Model('Surface');
+    surface.BufferData(CreateSurfaceData());
+
+    light = new Model('light');
+    let l = [];
+    l.push(lightPos[0], lightPos[1],lightPos[2]);
+    l.push(0,0,0);
+    light.BufferData(l);
     gl.enable(gl.DEPTH_TEST);
 }
 
@@ -267,6 +250,8 @@ function createProgram(gl, vShader, fShader) {
  * initialization function that will be called when the page has loaded
  */
 function init() {
+    lightPositionEl = document.getElementById('lightPostion');
+
     let canvas;
     try {
         canvas = document.getElementById("webglcanvas");
@@ -291,5 +276,15 @@ function init() {
 
     spaceball = new TrackballRotator(canvas, draw, 0);
 
+    draw();
+}
+
+function Redraw() {
+    surface.BufferData(CreateSurfaceData());
+    light = new Model('light');
+    let l = [];
+    l.push(lightPos[0], lightPos[1],lightPos[2]);
+    l.push(0,0,0);
+    light.BufferData(l);
     draw();
 }

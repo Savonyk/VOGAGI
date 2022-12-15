@@ -1,0 +1,510 @@
+//html
+<!DOCTYPE html>
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+
+<title>PA#1</title>
+<style>
+    body {
+        background-color: #EEEEEE;
+    }
+</style>
+
+<script src="./Utils/trackball-rotator.js"></script>
+<script src="./Utils/m4.js"></script>
+<script src="./shader.gpu"></script>
+<script src="./main.js"></script>
+
+</head>
+<body onload="init()">
+
+<h2>A Cube with "Trackball" Mouse Rotation</h2>
+
+<p id="message">Drag your mouse on the cube to rotate it.<br>
+(On a touch screen, you can use your finger.)</p>
+
+
+<div id="canvas-holder">
+   <canvas width="600" height="600" id="webglcanvas" style="background-color:red"></canvas>
+</div>
+
+
+</body></html>
+
+
+
+<p>
+        <label for="lightPostionY">Y:</label>
+        <input id="lightPostionY" type="range" min="-20" max="20" step="1" onchange="reDraw()"/>
+    </p>
+    <p>
+        <label for="lightPostionZ">Z:</label>
+        <input id="lightPostionZ" type="range" min="-20" max="20" step="1" onchange="reDraw()"/>
+    </p>
+
+//js
+'use strict';
+
+let gl;                         // The webgl context.
+let surface;                    // A surface model
+let light;
+let keys = [];
+let lightPoint;
+let radius = 1.7;
+let alpha = 0;
+let theta = 0;
+let shProgram;                  // A shader program
+let spaceball;                  // A SimpleRotator object that lets the user rotate the view by mouse.
+let height = 1.5;
+let width = 360;
+let u = 18;
+let v = 0.15;
+let p = 1;
+
+function GetRadiansFromDegree(angle) {
+    return angle * Math.PI / 180;
+}
+
+function GetLightPoint()
+{
+    let x = radius * Math.sin(theta) * Math.cos(alpha);
+    let y =  radius * Math.cos(theta);
+    let z = radius * Math.sin(theta) * Math.sin(alpha);
+
+    return [x,y,z]; 
+}
+
+function Extrapolate(start, end, t)
+{
+    let result = [0, 0, 0];
+
+    for(let i = 0; i < 3; i++)
+    {
+        result[i] = ((end[i] * (1 + t)) - start[i]) / t;
+    }
+
+    return result;
+}
+
+function GetNormalForTriangle(firstPoint, secondPoint, thirdPoint)
+{
+    let result = []; 
+
+    let a = m4.subtractVectors(secondPoint,firstPoint);
+    let b = m4.subtractVectors(thirdPoint,firstPoint);
+
+    result = m4.cross(a, b);
+
+    return result;
+}
+
+function CreateTriangles(vertices)
+{
+    let triangles = [];
+
+    for (let i = 0; i < vertices.length; i += 3) {
+
+        let first = [vertices[i], vertices[i + 1], vertices[i + 2]];
+        let second = [vertices[i + 3], vertices[i + 4], vertices[i + 5]];
+        let third = [vertices[i + 6], vertices[i + 7], vertices[i + 8]];
+
+        triangles.push(new Triangle(first, second, third, m4.normalize(GetNormalForTriangle(first, second, third))));
+    }
+    return triangles;
+}
+
+function UpdateNormalsInTriangles(triangles)
+{
+    let facetAverageNormals = [];
+
+    for(let i = 0; i < triangles.length;i++)
+    {
+        facetAverageNormals[i] = [0,0,0];
+    }
+
+    for(let i = 0; i < triangles.length - 1;i++)
+    {
+        for(let j = 0; j < triangles.length; j++)
+        {
+            if(triangles[i].ContainsVertex(triangles[j]))
+            {
+                let normal = m4.addVectors(triangles[i].normal, triangles[j].normal);
+                facetAverageNormals[i] = m4.addVectors(facetAverageNormals[i] ,normal);
+            }
+            
+        }
+    }
+
+    return facetAverageNormals;
+}
+
+function IsEqualValue(first, second)
+{
+    if(first[0] == second[0] || first[1] == second[1] || first[2] == second[2])     return true;
+
+    return false;
+}
+
+function Triangle(first, second, third, normal)
+{
+    this.firstPoint = first;
+    this.secondPoint = second;
+    this.thirdPoint = third;
+    this.normal = normal;
+    this.vertexs = [];
+
+    this.IsEqual = function(triangle)
+    {
+        if(IsEqualValue(this.firstPoint, triangle.firstPoint) && IsEqualValue(this.secondPoint, triangle.secondPoint) 
+        && IsEqualValue(this.thirdPoint, triangle.thirdPoint) ) return true;
+
+        return false;
+    }
+
+    this.ContainsVertex = function(triangle)
+    {
+        if(this.IsEqual(triangle)) return false;
+
+        if(IsEqualValue(this.firstPoint, triangle.firstPoint) || IsEqualValue(this.secondPoint, triangle.secondPoint) 
+            || IsEqualValue(this.thirdPoint, triangle.thirdPoint) ) return true;
+
+        return false;
+    }
+}
+
+// Constructor
+function Model(name) {
+    this.name = name;
+    this.iVertexBuffer = gl.createBuffer();
+    this.iNormalBuffer = gl.createBuffer();
+    this.count = 0;
+
+    this.BufferData = function(vertices, normal) { 
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.iVertexBuffer);
+        //STREAM_DRAW STATIC_DRAW
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STREAM_DRAW);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.iNormalBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normal), gl.STREAM_DRAW);
+
+        this.count = vertices.length / 3;
+    }
+
+    this.Draw = function(mode) {
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.iVertexBuffer);
+        gl.vertexAttribPointer(shProgram.iAttribVertex, 3, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(shProgram.iAttribVertex);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.iNormalBuffer);
+        gl.vertexAttribPointer(shProgram.iAttribNormal, 3, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(shProgram.iAttribNormal);
+
+        gl.drawArrays(mode, 0, this.count);
+    }
+}
+
+// Constructor
+function ShaderProgram(name, program) { 
+
+    this.name = name;
+    this.prog = program;
+
+    // Location of the attribute variable in the shader program.
+    this.iAttribVertex = -1;
+    // Location of the attribute variable in the shader program.
+    this.iAttribNormal = -1;
+    // Location of the uniform specifying a color for the primitive.
+    this.iColor = -1;
+    // Location of the uniform matrix representing the combined transformation.
+    this.iModelViewProjectionMatrix = -1;
+    this.iNormalMatrix = -1;
+
+    // Ambient, diffuse, specular
+    this.iAmbientColor = -1;
+    this.iDiffuseColor = -1;
+    this.iSpecularColor = -1;
+
+    // Shininess
+    this.iShininess = -1;
+
+    // Light position
+    this.iLightPos = -1;
+    this.iLightVec = -1;
+
+    this.Use = function() {
+        gl.useProgram(this.prog);
+    }
+}
+
+
+/*Draws a colored cube, along with a set of coordinate axes.
+ * (Note that the use of the above drawPrimitive function is not an efficient
+ * way to draw with WebGL.  Here, the geometry is so simple that it doesn't matter.)
+ */
+function draw() { 
+    gl.clearColor(0,0,0,1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    
+    /* Set the values of the projection transformation */
+    let orthographic = m4.orthographic(-2, 2, -2,2, 8, 12); 
+    
+    /* Get the view matrix from the SimpleRotator object.*/
+    let modelView = spaceball.getViewMatrix();
+
+    let rotateToPointZero = m4.axisRotation([0.707,0.707,0], 0.7);
+    let translateToPointZero = m4.translation(0,0,-10);
+
+    let matAccum0 = m4.multiply(rotateToPointZero, modelView );
+    let matAccum1 = m4.multiply(translateToPointZero, matAccum0 );
+
+    const modelviewInv = m4.inverse(matAccum1, new Float32Array(16));
+    const normalMatrix = m4.transpose(modelviewInv, new Float32Array(16));
+        
+    /* Multiply the projection matrix times the modelview matrix to give the
+       combined transformation matrix, and send that to the shader program. */
+    let modelViewProjection = m4.multiply(orthographic, matAccum1 );
+
+    gl.uniformMatrix4fv(shProgram.iModelViewProjectionMatrix, false, modelViewProjection );
+    gl.uniformMatrix4fv(shProgram.iNormalMatrix, false, normalMatrix);
+
+    gl.uniform3fv(shProgram.iLightPos, lightPoint);
+    gl.uniform3fv(shProgram.iLightVec, new Float32Array(3));
+
+    gl.uniform1f(shProgram.iShininess, 1.0);
+
+    gl.uniform3fv(shProgram.iAmbientColor, [0.2, 0.1, 0.0]);
+    gl.uniform3fv(shProgram.iDiffuseColor, [1.0, 1.0, 0.0]);
+    gl.uniform3fv(shProgram.iSpecularColor, [1.0, 1.0, 1.0]);
+
+    let mode = gl.TRIANGLE_STRIP;
+    surface.Draw(mode);
+
+    mode = gl.LINES;
+    light.Draw(mode);
+}
+
+function GetCurrentZPosition(h){
+    return Math.pow(Math.abs(h) - height, 2) / (2*p);
+}  
+
+// surface - parabolic humming-top
+// x = ((|z| - h)^2 / 2*p)) * cosB
+// y = ((|z| - h)^2 / 2*p)) * sinB
+// z = z
+function CreateSurfaceData()
+{
+    let vertexList = [];
+
+    for (let i = 0; i <= 360; i += u) 
+    {
+        for(let j = -height; j <= height; j += v)
+        {
+            let currentAngle = GetRadiansFromDegree(i);
+            let currentTemp = GetCurrentZPosition(j);
+            let nextAngle = GetRadiansFromDegree(i + u);
+
+            vertexList.push(currentTemp * Math.cos(currentAngle), j, currentTemp * Math.sin(currentAngle));
+            vertexList.push(currentTemp * Math.cos(nextAngle), j, currentTemp * Math.sin(nextAngle));
+        }
+    }
+
+    return vertexList;
+}
+
+function CreateSurfaceNormals(vertices)
+{
+    let normalList = [];
+    let triangles = CreateTriangles(vertices);
+
+    let normals = UpdateNormalsInTriangles(triangles);
+
+    for(let i = 0; i < normals.length; i++)
+    {
+        let normal = m4.normalize(normals[i]);
+        normalList.push(normal[0], normal[1], normal[2]);
+    }
+
+    return normalList;
+}
+
+function CreateLightNormal(vertices)
+{
+    let normalList = []
+
+    let first = [vertices[0], vertices[1], vertices[2]];
+    let second = [vertices[3], vertices[4], vertices[5]];
+    let third = [vertices[6], vertices[7], vertices[8]];
+
+    let normal = m4.normalize(GetNormalForTriangle(first, second, third));
+
+    normalList.push(normal[0], normal[1], normal[2]);
+
+    return normalList;
+
+}
+
+function CreateLightData(direction)
+{
+    let vertexList = [];
+    vertexList.push(direction[0],direction[1],direction[2]);
+    let secondPoint = Extrapolate([0,0,0], direction, 4);
+    vertexList.push(secondPoint[0], secondPoint[1], secondPoint[2]);
+    vertexList.push(secondPoint[0], secondPoint[1], secondPoint[2]);
+
+
+    return vertexList;
+}
+
+/* Initialize the WebGL context. Called from init() */
+function initGL() {
+    let prog = createProgram( gl, vertexShaderSource, fragmentShaderSource );
+
+    shProgram = new ShaderProgram('Basic', prog);
+    shProgram.Use();
+
+    shProgram.iAttribVertex              = gl.getAttribLocation(prog, "vertex");
+    shProgram.iModelViewProjectionMatrix = gl.getUniformLocation(prog, "ModelViewProjectionMatrix");
+    shProgram.iColor                     = gl.getUniformLocation(prog, "color");
+
+    shProgram.iNormal                    = gl.getAttribLocation(prog, 'normal');
+    shProgram.iNormalMatrix              = gl.getUniformLocation(prog, 'normalMatrix');
+
+    shProgram.iAmbientColor              = gl.getUniformLocation(prog, 'ambientColor');
+    shProgram.iDiffuseColor              = gl.getUniformLocation(prog, 'diffuseColor');
+    shProgram.iSpecularColor             = gl.getUniformLocation(prog, 'specularColor');
+
+    shProgram.iShininess                 = gl.getUniformLocation(prog, 'shininess');
+
+    shProgram.iLightPos                  = gl.getUniformLocation(prog, 'lightPosition');
+    shProgram.iLightVec                  = gl.getUniformLocation(prog, 'lightVec');
+
+    surface = new Model('Surface');
+    let surfaceVertices = CreateSurfaceData();
+    let surfaceNormals = CreateSurfaceNormals(surfaceVertices);
+    surface.BufferData(surfaceVertices, surfaceNormals);
+
+    light = new Model('Light');
+    alpha = GetRadiansFromDegree(90);
+    theta = GetRadiansFromDegree(90);
+    lightPoint = GetLightPoint();
+    let lightVertices = CreateLightData(lightPoint);
+    let lightNormal = CreateLightNormal(lightVertices);
+    light.BufferData(lightVertices, lightNormal);
+
+    gl.enable(gl.DEPTH_TEST);
+}
+
+
+/* Creates a program for use in the WebGL context gl, and returns the
+ * identifier for that program.  If an error occurs while compiling or
+ * linking the program, an exception of type Error is thrown.  The error
+ * string contains the compilation or linking error.  If no error occurs,
+ * the program identifier is the return value of the function.
+ * The second and third parameters are strings that contain the
+ * source code for the vertex shader and for the fragment shader.
+ */
+function createProgram(gl, vShader, fShader) 
+{
+    let vsh = gl.createShader( gl.VERTEX_SHADER );
+    gl.shaderSource(vsh,vShader);
+    gl.compileShader(vsh);
+    if ( ! gl.getShaderParameter(vsh, gl.COMPILE_STATUS) ) {
+        throw new Error("Error in vertex shader:  " + gl.getShaderInfoLog(vsh));
+     }
+    let fsh = gl.createShader( gl.FRAGMENT_SHADER );
+    gl.shaderSource(fsh, fShader);
+    gl.compileShader(fsh);
+    if ( ! gl.getShaderParameter(fsh, gl.COMPILE_STATUS) ) {
+       throw new Error("Error in fragment shader:  " + gl.getShaderInfoLog(fsh));
+    }
+    let prog = gl.createProgram();
+    gl.attachShader(prog,vsh);
+    gl.attachShader(prog, fsh);
+    gl.linkProgram(prog);
+    if ( ! gl.getProgramParameter( prog, gl.LINK_STATUS) ) {
+       throw new Error("Link error in program:  " + gl.getProgramInfoLog(prog));
+    }
+    return prog;
+}
+
+function KeysPressed(e)
+{
+    keys[e.keyCode] = true;
+
+    const delta = GetRadiansFromDegree(2)
+    //left
+    if(keys[37])
+    {
+        alpha -= delta;
+    }
+    //right
+    if(keys[39])
+    {
+        alpha += delta;
+    }
+    //down
+    if(keys[38])
+    {
+        theta -= delta;
+    }
+    //up
+    if(keys[40])
+    {
+        theta += delta;
+    }
+    
+    e.preventDefault();
+
+    let surfaceVertices = CreateSurfaceData();
+    let surfaceNormals = CreateSurfaceNormals(surfaceVertices);
+    surface.BufferData(surfaceVertices, surfaceNormals);
+
+    lightPoint = GetLightPoint();
+    let lightVertices = CreateLightData(lightPoint);
+    let lightNormal = CreateLightNormal(lightVertices);
+    light.BufferData(lightVertices, lightNormal);
+
+    //gl.enable(gl.DEPTH_TEST);
+
+    draw();
+}
+function KeysReleased(e)
+{
+    //mark keys that were released
+
+    keys[e.keyCode] = false;
+}
+/**
+ * initialization function that will be called when the page has loaded
+ */
+function init() 
+{
+    let canvas;
+    try {
+        canvas = document.getElementById("webglcanvas");
+        gl = canvas.getContext("webgl");
+        if ( ! gl ) {
+            throw "Browser does not support WebGL";
+        }
+    }
+    catch (e) {
+        document.getElementById("canvas-holder").innerHTML =
+            "<p>Sorry, could not get a WebGL graphics context.</p>";
+        return;
+    }
+    try {
+        initGL();  // initialize the WebGL graphics context
+    }
+    catch (e) {
+        document.getElementById("canvas-holder").innerHTML =
+            "<p>Sorry, could not initialize the WebGL graphics context: " + e + "</p>";
+        return;
+    }
+
+    spaceball = new TrackballRotator(canvas, draw, 0);
+    window.addEventListener("keydown", KeysPressed, false);
+    window.addEventListener("keyup", KeysReleased, false);
+    draw();
+}
