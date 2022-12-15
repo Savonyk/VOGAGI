@@ -176,6 +176,16 @@ function CreateSurfaceData()
     return vertexList;
 }
 
+function CreateLightData()
+{
+    let vertexList = [];
+
+    vertexList.push(lightPos[0], lightPos[1],lightPos[2]);
+    vertexList.push(0,0,0);
+
+    return vertexList;
+}
+
 
 /* Initialize the WebGL context. Called from init() */
 function initGL() {
@@ -204,12 +214,9 @@ function initGL() {
 
     surface = new Model('Surface');
     surface.BufferData(CreateSurfaceData());
-
+    
     light = new Model('light');
-    let l = [];
-    l.push(lightPos[0], lightPos[1],lightPos[2]);
-    l.push(0,0,0);
-    light.BufferData(l);
+    light.BufferData(CreateLightData());
     gl.enable(gl.DEPTH_TEST);
 }
 
@@ -281,10 +288,6 @@ function init() {
 
 function Redraw() {
     surface.BufferData(CreateSurfaceData());
-    light = new Model('light');
-    let l = [];
-    l.push(lightPos[0], lightPos[1],lightPos[2]);
-    l.push(0,0,0);
-    light.BufferData(l);
+    light.BufferData(CreateLightData());
     draw();
 }
