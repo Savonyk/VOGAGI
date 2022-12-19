@@ -2,38 +2,16 @@
 const vertexShaderSource = `
 attribute vec3 vertex;
 attribute vec3 normal;
-uniform mat4 ModelViewProjectionMatrix;
-uniform float shininess;
-uniform vec3 ambientColor;
-uniform vec3 diffuseColor;
-uniform vec3 specularColor;
-uniform vec3 lightPosition;
-
-varying vec4 color;
+uniform mat4 ModelViewProjectionMatrix, normalMat;
+varying vec3 normalInterp;
+varying vec3 vertPos;
 
 void main() {
     vec4 vertPos4 = ModelViewProjectionMatrix * vec4(vertex, 1.0);
-    vec3 vertPos = vec3(vertPos4) / vertPos4.w;
-    //vec3 normalInterp = vec3(normalMat * vec4(normal, 0.0));
+    vertPos = vec3(vertPos4) / vertPos4.w;
+    normalInterp = vec3(normalMat * vec4(normal, 0.0));
     gl_Position = vertPos4;
 
-    vec3 n = normalize(normal);
-    vec3 lightDirection = normalize(lightPosition + vertPos);
-
-    float nDotLight = max(dot(n, lightDirection), 0.0);
-    float specularLight = 0.0;
-    if (nDotLight > 0.0) {
-        vec3 viewDir = normalize(-vertPos);
-        vec3 halfDir = normalize(lightDirection + viewDir);
-        float specularAngle = max(dot(halfDir, n), 0.0);
-        specularLight = pow(specularAngle, shininess);
-    }
-
-    vec3 diffuse = nDotLight * diffuseColor;
-    vec3 ambient = ambientColor;
-    vec3 specular = specularLight * specularColor;
-
-    color = vec4(diffuse + ambient + specular, 1.0);
 }`;
 
 
@@ -46,6 +24,33 @@ const fragmentShaderSource = `
 #endif
 
 varying vec4 color;
+precision mediump float;
+varying vec3 normalInterp;  // Surface normal
+varying vec3 vertPos;       // Vertex position
+uniform float ambientCoefficient;   // Ambient reflection coefficient
+uniform float diffuseCoefficient;   // Diffuse reflection coefficient
+uniform float specularCoefficient;   // Specular reflection coefficient
+uniform float shininess; // Shininess
+uniform vec3 ambientColor;
+uniform vec3 diffuseColor;
+uniform vec3 specularColor;
+uniform vec3 lightPosition;
+
 void main() {
-    gl_FragColor = color;
+  vec3 vNormal = normalize(normalInterp);
+  vec3 light = normalize(lightPosition);
+
+  float dotProduct = max(dot(vNormal, light), 0.0);
+  float specular = 0.0;
+
+  if(dotProduct > 0.0) {
+    vec3 reflect = reflect(-light, vNormal);      
+    vec3 n_vertPos = normalize(-vertPos); 
+    float specAngle = max(dot(reflect, n_vertPos), 0.0);
+    specular = pow(specAngle, shininess);
+  }
+  gl_FragColor = vec4(ambientCoefficient * ambientColor 
+                  + diffuseCoefficient * dotProduct * diffuseColor 
+                  + specularCoefficient * specular * specularColor, 1.0);
+
 }`;
