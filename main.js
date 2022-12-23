@@ -5,13 +5,14 @@ let surface;                    // A surface model
 let light;
 let shProgram;                  // A shader program
 let spaceball;                  // A SimpleRotator object that lets the user rotate the view by mouse.
-let N = 20;                     // splines count
 let lightPositionEl;
 let lightPos = [0,0,0];
 let height = 1.5;
 let step = 20;
 let radius = 10;
 let p = 1;
+let uStep = 360 / (step + 1); 
+let vStep = 2 * height / (step + 1);
 
 function GetRadiansFromDegree(angle) {
     return angle * Math.PI / 180;
@@ -148,32 +149,38 @@ function draw() {
 
 function GetCurrentZPosition(h){
     return Math.pow(Math.abs(h) - height, 2) / (2*p);
-}  
+}
 
 // surface - parabolic humming-top
 // x = ((|z| - h)^2 / 2*p)) * cosB
 // y = ((|z| - h)^2 / 2*p)) * sinB
 // z = z
-function CreateSurfaceData()
+function CreateParabolicData(startU, endU, startV, endV, stepU, stepV)
 {
-    let vertexList = [];
+    let list = [];
 
-    let uStep = 360 / (step + 1); 
-    let vStep = 2 * height / (step + 1);
-    for (let u = 0; u <= 360; u += uStep) 
+    for (let u = startU; u <= endU; u += stepU) 
     {
-        for(let v = -height; v <= height; v += vStep)
+        for(let v = startV; v <= endV; v += stepV)
         {
             let currentAngle = GetRadiansFromDegree(u);
             let currentTemp = GetCurrentZPosition(v);
-            let nextAngle = GetRadiansFromDegree(u + uStep);
+            let nextAngle = GetRadiansFromDegree(u + stepU);
 
-            vertexList.push(currentTemp * Math.cos(currentAngle), v, currentTemp * Math.sin(currentAngle));
-            vertexList.push(currentTemp * Math.cos(nextAngle), v, currentTemp * Math.sin(nextAngle));
+            list.push(currentTemp * Math.cos(currentAngle), v, currentTemp * Math.sin(currentAngle));
+            list.push(currentTemp * Math.cos(nextAngle), v, currentTemp * Math.sin(nextAngle));
         }
     }
 
-    return vertexList;
+    return list;
+}
+
+function CreateSurfaceData()
+{
+    uStep = 360 / (step + 1); 
+    vStep = 2 * height / (step + 1);
+
+    return CreateParabolicData(0, 360, -height, height, uStep, vStep);
 }
 
 function CreateLightData()
@@ -258,6 +265,9 @@ function createProgram(gl, vShader, fShader) {
  */
 function init() {
     lightPositionEl = document.getElementById('lightPostion');
+    var image = document.getElementById('texture');
+    image.height = 150;
+    image.width = 150;
 
     let canvas;
     try {
