@@ -33,12 +33,16 @@ function GetCirclePoint(angle)
 function Model(name) {
     this.name = name;
     this.iVertexBuffer = gl.createBuffer();
+    this.iTexCoordBuffer = gl.createBuffer();
     this.count = 0;
 
-    this.BufferData = function(vertices) {
+    this.BufferData = function(vertices, texCoord) {
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.iVertexBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STREAM_DRAW);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.iTexCoordBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(texCoord), gl.STREAM_DRAW);
 
         this.count = vertices.length/3;
     }
@@ -50,7 +54,9 @@ function Model(name) {
         gl.enableVertexAttribArray(shProgram.iAttribVertex);
    
         gl.vertexAttribPointer(shProgram.iNormal, 3, gl.FLOAT, false, 0, 0);
-        gl.enableVertexAttribArray(shProgram.iNormal);    
+        gl.enableVertexAttribArray(shProgram.iNormal); 
+        
+        LoadTexture();
 
         gl.drawArrays(mode, 0, this.count);
 
@@ -83,6 +89,8 @@ function ShaderProgram(name, program) {
     this.iAmbientCoefficient = -1;
     this.iDiffuseCoefficient = -1;
     this.iSpecularCoefficient = -1;
+    this.iTMU = -1;
+    this.iTexCoord = -1;
     // Shininess
     this.iShininess = -1;
 
@@ -100,7 +108,7 @@ function ShaderProgram(name, program) {
  * way to draw with WebGL.  Here, the geometry is so simple that it doesn't matter.)
  */
 function draw() { 
-    gl.clearColor(0,0,0,1);
+    gl.clearColor(1,1,1,1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     
     /* Set the values of the projection transformation */
@@ -179,8 +187,30 @@ function CreateSurfaceData()
 {
     uStep = 360 / (step + 1); 
     vStep = 2 * height / (step + 1);
-
+    let v = CreateParabolicData(0, 360, -height, height, uStep, vStep);
+    console.log(v.length);
     return CreateParabolicData(0, 360, -height, height, uStep, vStep);
+}
+
+function CreateTextureCoordinates()
+{
+    let textCoord = [];
+
+    uStep = 360 / (step + 1); 
+    vStep = 2 * height / (step + 1);
+
+    for (let u = 0; u <= 360; u += uStep) 
+    {
+        for(let v = -height; v <= height; v += vStep)
+        {
+            textCoord.push(GetRadiansFromDegree(u) / (2 * Math.PI), v / (2*height));
+            textCoord.push(GetRadiansFromDegree(u + uStep) / (2 * Math.PI), (v + vStep) / (2 * height));
+        }
+    }
+
+    console.log(" " + textCoord.length);
+
+    return textCoord;
 }
 
 function CreateLightData()
@@ -218,10 +248,12 @@ function initGL() {
     shProgram.iSpecularCoefficient       = gl.getUniformLocation(prog, 'specularCoefficient');
     shProgram.iAmbientCoefficient        = gl.getUniformLocation(prog, 'ambientCoefficient');
     shProgram.iDiffuseCoefficient        = gl.getUniformLocation(prog, 'diffuseCoefficient');
+    shProgram.iTMU                       = gl.getUniformLocation(prog, 'sampler'); 
+    shProgram.iTexCoord                  = gl.getAttribLocation(prog, 'texCoord');
 
     surface = new Model('Surface');
-    surface.BufferData(CreateSurfaceData());
-    
+    surface.BufferData(CreateSurfaceData(), CreateTextureCoordinates());
+    let s = CreateTextureCoordinates();
     light = new Model('light');
     light.BufferData(CreateLightData());
     gl.enable(gl.DEPTH_TEST);
@@ -265,10 +297,6 @@ function createProgram(gl, vShader, fShader) {
  */
 function init() {
     lightPositionEl = document.getElementById('lightPostion');
-    var image = document.getElementById('texture');
-    image.height = 150;
-    image.width = 150;
-
     let canvas;
     try {
         canvas = document.getElementById("webglcanvas");
@@ -294,6 +322,28 @@ function init() {
     spaceball = new TrackballRotator(canvas, draw, 0);
 
     draw();
+}
+
+function LoadTexture()
+{
+    var texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+    //gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0,0,255,255]));
+    var image = new Image();
+    image.crossOrigin = "Anonymous";
+    image.src = "https://user-images.githubusercontent.com/12417677/97433592-a9e07800-1915-11eb-8f0b-f4e8cdf8babb.png";
+    image.addEventListener('load', () => {
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+
+        draw();
+    }
+
+    );
+
 }
 
 function Redraw() {

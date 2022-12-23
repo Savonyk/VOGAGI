@@ -2,14 +2,19 @@
 const vertexShaderSource = `
 attribute vec3 vertex;
 attribute vec3 normal;
+attribute vec2 texCoord;
 uniform mat4 ModelViewProjectionMatrix, normalMat;
 varying vec3 normalInterp;
 varying vec3 vertPos;
+varying vec2 textureInterpolate;
 
 void main() {
     vec4 vertPos4 = ModelViewProjectionMatrix * vec4(vertex, 1.0);
     vertPos = vec3(vertPos4) / vertPos4.w;
     normalInterp = vec3(normalMat * vec4(normal, 0.0));
+ 
+    textureInterpolate = texCoord;
+
     gl_Position = vertPos4;
 
 }`;
@@ -25,8 +30,6 @@ const fragmentShaderSource = `
 
 varying vec4 color;
 precision mediump float;
-varying vec3 normalInterp;  // Surface normal
-varying vec3 vertPos;       // Vertex position
 uniform float ambientCoefficient;   // Ambient reflection coefficient
 uniform float diffuseCoefficient;   // Diffuse reflection coefficient
 uniform float specularCoefficient;   // Specular reflection coefficient
@@ -35,6 +38,12 @@ uniform vec3 ambientColor;
 uniform vec3 diffuseColor;
 uniform vec3 specularColor;
 uniform vec3 lightPosition;
+uniform sampler2D sampler;
+
+varying vec2 textureInterpolate;
+varying vec3 normalInterp;  // Surface normal
+varying vec3 vertPos;       // Vertex position
+
 
 void main() {
   vec3 vNormal = normalize(normalInterp);
@@ -49,8 +58,13 @@ void main() {
     float specAngle = max(dot(reflect, n_vertPos), 0.0);
     specular = pow(specAngle, shininess);
   }
-  gl_FragColor = vec4(ambientCoefficient * ambientColor 
+
+  vec4 lightColor = vec4(ambientCoefficient * ambientColor 
                   + diffuseCoefficient * dotProduct * diffuseColor 
                   + specularCoefficient * specular * specularColor, 1.0);
+
+  vec4 texColor = texture2D(sampler, textureInterpolate);
+
+  gl_FragColor = texColor;
 
 }`;
