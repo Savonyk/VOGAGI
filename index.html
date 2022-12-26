@@ -32,6 +32,28 @@
     </p>
 </div>
 
+<div id="scalePostion">
+    <style>
+        #scalePostionX {
+            width: 600px;
+        }
+        </style>
+        <style>
+            #scalePostionY {
+                width: 600px;
+            }
+            </style>
+    <p>scale point: -1.5 to 1.5 by y and 0 to 360 by x <p>
+    <p>
+        <label for="scalePostionX">X:</label>
+        <input id="scalePostionX" type="range" min="0" max="360" step="1" onchange="Redraw()"/>
+    </p>
+    <p>
+        <label for="scalePostionY">Y:</label>
+        <input id="scalePostionY" type="range" min="-1.5" max="1.5" step="0.008" onchange="Redraw()"/>
+    </p>
+</div>
+
 <div id="canvas-holder">
    <canvas width="600" height="600" id="webglcanvas" style="background-color:red"></canvas>
 </div>

@@ -3,17 +3,80 @@ const vertexShaderSource = `
 attribute vec3 vertex;
 attribute vec3 normal;
 attribute vec2 texCoord;
+
 uniform mat4 ModelViewProjectionMatrix, normalMat;
+uniform vec2 scalePoint;
+uniform float scaleValue;
+
 varying vec3 normalInterp;
 varying vec3 vertPos;
 varying vec2 textureInterpolate;
 
+mat4 scale(float value)
+{
+  mat4 scaleMatrix;
+
+  for(int i = 0; i < 4;i++)
+  {
+    for(int j = 0; j < 4;j++)
+    {
+      if(i != j)
+      {
+        scaleMatrix[i][j] = 0.0;
+      }
+      else
+      {
+        scaleMatrix[i][j] = value;
+      }
+    }
+  }  
+
+  scaleMatrix[3][3] = 1.0;
+
+  return scaleMatrix;
+}
+
+mat4 Translate(vec2 point)
+{
+  mat4 translationMatrix;
+
+  for(int i = 0; i < 4;i++)
+  {
+    for(int j = 0; j < 4;j++)
+    {
+      if(i != j)
+      {
+        translationMatrix[i][j] = 0.0;
+      }
+      else
+      {
+        translationMatrix[i][j] = 1.0;
+      }
+    }
+  }
+
+  translationMatrix[3][0] = point.x;
+  translationMatrix[3][1] = point.y;
+  translationMatrix[3][2] = 1.0;
+
+  return translationMatrix;
+}
+
+
 void main() {
+    mat4 scale = scale(scaleValue);
+    mat4 translate = Translate(-scalePoint);
+    mat4 translateBack = Translate(scalePoint);
+
     vec4 vertPos4 = ModelViewProjectionMatrix * vec4(vertex, 1.0);
     vertPos = vec3(vertPos4) / vertPos4.w;
     normalInterp = vec3(normalMat * vec4(normal, 0.0));
- 
-    textureInterpolate = texCoord;
+    
+    vec4 texCoordTranslated = vec4(texCoord,1,0) * translate;
+    vec4 texCoordScaled = texCoordTranslated * scale;
+    vec4 texCoordTranslatedToBack = texCoordScaled * translateBack;
+
+    textureInterpolate = texCoordTranslatedToBack.xy;
 
     gl_Position = vertPos4;
 
@@ -44,11 +107,9 @@ varying vec2 textureInterpolate;
 varying vec3 normalInterp;  // Surface normal
 varying vec3 vertPos;       // Vertex position
 
-
 void main() {
   vec3 vNormal = normalize(normalInterp);
   vec3 light = normalize(lightPosition);
-
   float dotProduct = max(dot(vNormal, light), 0.0);
   float specular = 0.0;
 

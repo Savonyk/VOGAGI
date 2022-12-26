@@ -7,6 +7,7 @@ let shProgram;                  // A shader program
 let spaceball;                  // A SimpleRotator object that lets the user rotate the view by mouse.
 let lightPositionEl;
 let lightPos = [0,0,0];
+let scalePositionEl;
 let height = 1.5;
 let step = 100;
 let radius = 10;
@@ -98,6 +99,8 @@ function ShaderProgram(name, program) {
 
     // Light position
     this.iLightPos = -1;
+    this.iScaleValue = -1;
+    this.iScalePoint = -1;
 
     this.Use = function() {
         gl.useProgram(this.prog);
@@ -138,23 +141,26 @@ function draw() {
     gl.uniformMatrix4fv(shProgram.iNormalMatrix, false, normalMatrix);
 
     let angle = Array.from(lightPositionEl.getElementsByTagName('input')).map(el => +el.value)[0];
-
     lightPos = GetCirclePoint(angle);
     gl.uniform3fv(shProgram.iLightPos, lightPos);
+
+    let scalePos = Array.from(scalePositionEl.getElementsByTagName('input')).map(el => +el.value);
+    scalePos[0] = GetRadiansFromDegree(scalePos[0]) / (2 * Math.PI); 
+    scalePos[1] = (scalePos[1] + height) / (2*height);
 
     gl.uniform1f(shProgram.iShininess, 80.0);
     gl.uniform1f(shProgram.iAmbientCoefficient, 1);
     gl.uniform1f(shProgram.iDiffuseCoefficient, 1);
     gl.uniform1f(shProgram.iSpecularCoefficient, 1);
 
-    //gl.uniform3fv(shProgram.iAmbientColor, [0.2, 0.1, 0.4]);
     gl.uniform3fv(shProgram.iAmbientColor, [1, 1, 1]);
     gl.uniform3fv(shProgram.iDiffuseColor, [0, 0.8, 0.8]);
     gl.uniform3fv(shProgram.iSpecularColor, [1.0, 1.0, 1.0]);
 
     gl.uniform1i(shProgram.iTMU, 0);
+    gl.uniform1f(shProgram.iScaleValue, 0.8);
+    gl.uniform2fv(shProgram.iScalePoint, scalePos);
 
-    /* Draw the six faces of a cube, with different colors. */
     gl.uniform4fv(shProgram.iColor, [0,0,0.8,1] );
     surface.Draw(gl.TRIANGLE_STRIP);
     light.Draw(gl.LINES);
@@ -235,6 +241,7 @@ function initGL() {
 
     shProgram.iAttribVertex              = gl.getAttribLocation(prog, "vertex");
     shProgram.iModelViewProjectionMatrix = gl.getUniformLocation(prog, "ModelViewProjectionMatrix");
+    shProgram.iTexCoord                  = gl.getAttribLocation(prog, 'texCoord');
     shProgram.iColor                     = gl.getUniformLocation(prog, "color");
 
     shProgram.iNormal                    = gl.getAttribLocation(prog, 'normal');
@@ -251,13 +258,14 @@ function initGL() {
     shProgram.iAmbientCoefficient        = gl.getUniformLocation(prog, 'ambientCoefficient');
     shProgram.iDiffuseCoefficient        = gl.getUniformLocation(prog, 'diffuseCoefficient');
     shProgram.iTMU                       = gl.getUniformLocation(prog, 'sampler'); 
-    shProgram.iTexCoord                  = gl.getAttribLocation(prog, 'texCoord');
+    shProgram.iScaleValue                = gl.getUniformLocation(prog, 'scaleValue');
+    shProgram.iScalePoint                = gl.getUniformLocation(prog, 'scalePoint');
 
     surface = new Model('Surface');
     surface.BufferData(CreateSurfaceData(), CreateTextureCoordinates());
     light = new Model('light');
-    let z = [0,0,1,1];
-    light.BufferData(CreateLightData(), z);
+    let tex = [0,0,1,1];
+    light.BufferData(CreateLightData(), tex);
 
     LoadTexture();
 
@@ -302,6 +310,7 @@ function createProgram(gl, vShader, fShader) {
  */
 function init() {
     lightPositionEl = document.getElementById('lightPostion');
+    scalePositionEl = document.getElementById('scalePostion');
     let canvas;
     try {
         canvas = document.getElementById("webglcanvas");
