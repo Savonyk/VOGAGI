@@ -8,7 +8,7 @@ let spaceball;                  // A SimpleRotator object that lets the user rot
 let lightPositionEl;
 let lightPos = [0,0,0];
 let height = 1.5;
-let step = 20;
+let step = 100;
 let radius = 10;
 let p = 1;
 let uStep = 360 / (step + 1); 
@@ -56,7 +56,9 @@ function Model(name) {
         gl.vertexAttribPointer(shProgram.iNormal, 3, gl.FLOAT, false, 0, 0);
         gl.enableVertexAttribArray(shProgram.iNormal); 
         
-        LoadTexture();
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.iTexCoordBuffer);
+        gl.vertexAttribPointer(shProgram.iTexCoord, 2 , gl.FLOAT, false, 0 , 0 );
+        gl.enableVertexAttribArray(shProgram.iTexCoord);
 
         gl.drawArrays(mode, 0, this.count);
 
@@ -108,7 +110,7 @@ function ShaderProgram(name, program) {
  * way to draw with WebGL.  Here, the geometry is so simple that it doesn't matter.)
  */
 function draw() { 
-    gl.clearColor(1,1,1,1);
+    gl.clearColor(0,0,0,1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     
     /* Set the values of the projection transformation */
@@ -145,9 +147,12 @@ function draw() {
     gl.uniform1f(shProgram.iDiffuseCoefficient, 1);
     gl.uniform1f(shProgram.iSpecularCoefficient, 1);
 
-    gl.uniform3fv(shProgram.iAmbientColor, [0.2, 0.1, 0.4]);
+    //gl.uniform3fv(shProgram.iAmbientColor, [0.2, 0.1, 0.4]);
+    gl.uniform3fv(shProgram.iAmbientColor, [1, 1, 1]);
     gl.uniform3fv(shProgram.iDiffuseColor, [0, 0.8, 0.8]);
     gl.uniform3fv(shProgram.iSpecularColor, [1.0, 1.0, 1.0]);
+
+    gl.uniform1i(shProgram.iTMU, 0);
 
     /* Draw the six faces of a cube, with different colors. */
     gl.uniform4fv(shProgram.iColor, [0,0,0.8,1] );
@@ -187,8 +192,7 @@ function CreateSurfaceData()
 {
     uStep = 360 / (step + 1); 
     vStep = 2 * height / (step + 1);
-    let v = CreateParabolicData(0, 360, -height, height, uStep, vStep);
-    console.log(v.length);
+
     return CreateParabolicData(0, 360, -height, height, uStep, vStep);
 }
 
@@ -201,14 +205,12 @@ function CreateTextureCoordinates()
 
     for (let u = 0; u <= 360; u += uStep) 
     {
-        for(let v = -height; v <= height; v += vStep)
+        for(let v = 0; v <= 2 * height; v += vStep)
         {
             textCoord.push(GetRadiansFromDegree(u) / (2 * Math.PI), v / (2*height));
-            textCoord.push(GetRadiansFromDegree(u + uStep) / (2 * Math.PI), (v + vStep) / (2 * height));
+            textCoord.push(GetRadiansFromDegree(u + uStep) / (2 * Math.PI), v / (2 * height));
         }
     }
-
-    console.log(" " + textCoord.length);
 
     return textCoord;
 }
@@ -253,9 +255,12 @@ function initGL() {
 
     surface = new Model('Surface');
     surface.BufferData(CreateSurfaceData(), CreateTextureCoordinates());
-    let s = CreateTextureCoordinates();
     light = new Model('light');
-    light.BufferData(CreateLightData());
+    let z = [0,0,1,1];
+    light.BufferData(CreateLightData(), z);
+
+    LoadTexture();
+
     gl.enable(gl.DEPTH_TEST);
 }
 
@@ -333,8 +338,8 @@ function LoadTexture()
 
     //gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0,0,255,255]));
     var image = new Image();
-    image.crossOrigin = "Anonymous";
-    image.src = "https://user-images.githubusercontent.com/12417677/97433592-a9e07800-1915-11eb-8f0b-f4e8cdf8babb.png";
+    image.crossOrigin = 'anonymous';
+    image.src = "https://upload.wikimedia.org/wikipedia/commons/6/63/Icon_Bird_512x512.png";
     image.addEventListener('load', () => {
         gl.bindTexture(gl.TEXTURE_2D, texture);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
