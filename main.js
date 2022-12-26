@@ -2,12 +2,13 @@
 
 let gl;                         // The webgl context.
 let surface;                    // A surface model
-let light;
+let scale;
 let shProgram;                  // A shader program
 let spaceball;                  // A SimpleRotator object that lets the user rotate the view by mouse.
 let lightPositionEl;
 let lightPos = [0,0,0];
 let scalePositionEl;
+let scalePosition = [0,0];
 let height = 1.5;
 let step = 100;
 let radius = 10;
@@ -144,9 +145,15 @@ function draw() {
     lightPos = GetCirclePoint(angle);
     gl.uniform3fv(shProgram.iLightPos, lightPos);
 
-    let scalePos = Array.from(scalePositionEl.getElementsByTagName('input')).map(el => +el.value);
-    scalePos[0] = GetRadiansFromDegree(scalePos[0]) / (2 * Math.PI); 
-    scalePos[1] = (scalePos[1] + height) / (2*height);
+    const scaleWorldPosition = Array.from(scalePositionEl.getElementsByTagName('input')).map(el => +el.value);
+    let scalePos = [];
+    scalePos[0] = GetRadiansFromDegree(scaleWorldPosition[0]) / (2 * Math.PI); 
+    scalePos[1] = (scaleWorldPosition[1] + height) / (2*height);
+    gl.uniform2fv(shProgram.iScalePoint, scalePos);
+
+    angle = GetRadiansFromDegree(scaleWorldPosition[0]);
+    let currentZ = GetCurrentZPosition(scaleWorldPosition[1]);
+    scalePosition = [currentZ * Math.cos(angle), scaleWorldPosition[1], currentZ * Math.sin(angle)]
 
     gl.uniform1f(shProgram.iShininess, 80.0);
     gl.uniform1f(shProgram.iAmbientCoefficient, 1);
@@ -159,11 +166,10 @@ function draw() {
 
     gl.uniform1i(shProgram.iTMU, 0);
     gl.uniform1f(shProgram.iScaleValue, 0.8);
-    gl.uniform2fv(shProgram.iScalePoint, scalePos);
 
     gl.uniform4fv(shProgram.iColor, [0,0,0.8,1] );
     surface.Draw(gl.TRIANGLE_STRIP);
-    light.Draw(gl.LINES);
+    scale.Draw(gl.LINES);
 }
 
 function GetCurrentZPosition(h){
@@ -221,12 +227,12 @@ function CreateTextureCoordinates()
     return textCoord;
 }
 
-function CreateLightData()
+function CreateScaleData()
 {
     let vertexList = [];
 
-    vertexList.push(lightPos[0], lightPos[1],lightPos[2]);
-    vertexList.push(0,0,0);
+    vertexList.push(scalePosition[0], scalePosition[1], scalePosition[2]);
+    vertexList.push(2 *scalePosition[0],2 *scalePosition[1],2 *scalePosition[2]);
 
     return vertexList;
 }
@@ -263,9 +269,9 @@ function initGL() {
 
     surface = new Model('Surface');
     surface.BufferData(CreateSurfaceData(), CreateTextureCoordinates());
-    light = new Model('light');
-    let tex = [0,0,1,1];
-    light.BufferData(CreateLightData(), tex);
+    scale = new Model('scale');
+    let tex = [1,1,1,1];
+    scale.BufferData(CreateScaleData(), tex);
 
     LoadTexture();
 
@@ -361,7 +367,8 @@ function LoadTexture()
 }
 
 function Redraw() {
-    surface.BufferData(CreateSurfaceData());
-    light.BufferData(CreateLightData());
+    surface.BufferData(CreateSurfaceData(), CreateTextureCoordinates());
+    let tex = [1,1,1,1];
+    scale.BufferData(CreateScaleData(), tex);
     draw();
 }

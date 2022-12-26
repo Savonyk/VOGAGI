@@ -36,45 +36,16 @@ mat4 scale(float value)
   return scaleMatrix;
 }
 
-mat4 Translate(vec2 point)
-{
-  mat4 translationMatrix;
-
-  for(int i = 0; i < 4;i++)
-  {
-    for(int j = 0; j < 4;j++)
-    {
-      if(i != j)
-      {
-        translationMatrix[i][j] = 0.0;
-      }
-      else
-      {
-        translationMatrix[i][j] = 1.0;
-      }
-    }
-  }
-
-  translationMatrix[3][0] = point.x;
-  translationMatrix[3][1] = point.y;
-  translationMatrix[3][2] = 1.0;
-
-  return translationMatrix;
-}
-
-
 void main() {
     mat4 scale = scale(scaleValue);
-    mat4 translate = Translate(-scalePoint);
-    mat4 translateBack = Translate(scalePoint);
-
+    
     vec4 vertPos4 = ModelViewProjectionMatrix * vec4(vertex, 1.0);
     vertPos = vec3(vertPos4) / vertPos4.w;
     normalInterp = vec3(normalMat * vec4(normal, 0.0));
     
-    vec4 texCoordTranslated = vec4(texCoord,1,0) * translate;
+    vec4 texCoordTranslated = vec4(texCoord -scalePoint ,0.0,0.0);
     vec4 texCoordScaled = texCoordTranslated * scale;
-    vec4 texCoordTranslatedToBack = texCoordScaled * translateBack;
+    vec4 texCoordTranslatedToBack = vec4(texCoord + scalePoint ,0.0,0.0);
 
     textureInterpolate = texCoordTranslatedToBack.xy;
 
