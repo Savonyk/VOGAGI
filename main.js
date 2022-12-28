@@ -3,11 +3,15 @@
 let gl;                         // The webgl context.
 let surface;                    // A surface model
 let scale;
+let light;
 let shProgram;                  // A shader program
 let spaceball;                  // A SimpleRotator object that lets the user rotate the view by mouse.
+
 let lightPositionEl;
-let lightPos = [0,0,0];
 let scalePositionEl;
+
+let scaleValue = 0.8;
+let lightPos = [0,0,0];
 let scalePosition = [0,0];
 let height = 1.5;
 let step = 100;
@@ -160,15 +164,16 @@ function draw() {
     gl.uniform1f(shProgram.iDiffuseCoefficient, 1);
     gl.uniform1f(shProgram.iSpecularCoefficient, 1);
 
-    gl.uniform3fv(shProgram.iAmbientColor, [1, 1, 1]);
+    gl.uniform3fv(shProgram.iAmbientColor, [0.2, 0.1, 0.4]);
     gl.uniform3fv(shProgram.iDiffuseColor, [0, 0.8, 0.8]);
     gl.uniform3fv(shProgram.iSpecularColor, [1.0, 1.0, 1.0]);
 
     gl.uniform1i(shProgram.iTMU, 0);
-    gl.uniform1f(shProgram.iScaleValue, 0.8);
+    gl.uniform1f(shProgram.iScaleValue, scaleValue);
 
     gl.uniform4fv(shProgram.iColor, [0,0,0.8,1] );
     surface.Draw(gl.TRIANGLE_STRIP);
+    light.Draw(gl.LINES);
     scale.Draw(gl.LINES);
 }
 
@@ -186,7 +191,7 @@ function CreateParabolicData(startU, endU, startV, endV, stepU, stepV)
 
     for (let u = startU; u <= endU; u += stepU) 
     {
-        for(let v = startV; v <= endV; v += stepV)
+        for(let v = startV; v >= endV; v -= stepV)
         {
             let currentAngle = GetRadiansFromDegree(u);
             let currentTemp = GetCurrentZPosition(v);
@@ -202,18 +207,12 @@ function CreateParabolicData(startU, endU, startV, endV, stepU, stepV)
 
 function CreateSurfaceData()
 {
-    uStep = 360 / (step + 1); 
-    vStep = 2 * height / (step + 1);
-
-    return CreateParabolicData(0, 360, -height, height, uStep, vStep);
+   return CreateParabolicData(0, 360, height, -height, uStep, vStep);
 }
 
 function CreateTextureCoordinates()
 {
     let textCoord = [];
-
-    uStep = 360 / (step + 1); 
-    vStep = 2 * height / (step + 1);
 
     for (let u = 0; u <= 360; u += uStep) 
     {
@@ -227,7 +226,17 @@ function CreateTextureCoordinates()
     return textCoord;
 }
 
-function CreateScaleData()
+function CreateLightData()
+{
+    let vertexList = [];
+
+    vertexList.push(lightPos[0], lightPos[1],lightPos[2]);
+    vertexList.push(0,0,0);
+
+    return vertexList;
+}
+
+function CreateScaleLineData()
 {
     let vertexList = [];
 
@@ -269,9 +278,12 @@ function initGL() {
 
     surface = new Model('Surface');
     surface.BufferData(CreateSurfaceData(), CreateTextureCoordinates());
+    light = new Model('light');
+    let tex = [0,0,0,0];
+    light.BufferData(CreateLightData(), tex);
     scale = new Model('scale');
-    let tex = [1,1,1,1];
-    scale.BufferData(CreateScaleData(), tex);
+    tex = [1,1,1,1];
+    scale.BufferData(CreateScaleLineData(), tex);
 
     LoadTexture();
 
@@ -351,7 +363,6 @@ function LoadTexture()
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
-    //gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0,0,255,255]));
     var image = new Image();
     image.crossOrigin = 'anonymous';
     image.src = "https://upload.wikimedia.org/wikipedia/commons/6/63/Icon_Bird_512x512.png";
@@ -368,7 +379,9 @@ function LoadTexture()
 
 function Redraw() {
     surface.BufferData(CreateSurfaceData(), CreateTextureCoordinates());
-    let tex = [1,1,1,1];
-    scale.BufferData(CreateScaleData(), tex);
+    let tex = [0,0,0,0];
+    light.BufferData(CreateLightData(), tex);
+    tex = [1,1,1,1];
+    scale.BufferData(CreateScaleLineData(), tex);
     draw();
 }
